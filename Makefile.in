@@ -1,0 +1,70 @@
+PROJECT := darkfs
+TOPDIR := $(CURDIR)
+BUILD_DIR ?= @BUILD_DIR@
+
+CC := @CC@
+AR := @AR@
+CFLAGS := @CFLAGS@
+CPPFLAGS := @CPPFLAGS@
+LDFLAGS := @LDFLAGS@
+LIBS := @LIBS@
+
+LIBV_DIR := @LIBV_DIR@
+LIBV_INCLUDE_DIR := @LIBV_INCLUDE_DIR@
+LIBV_LIBDIR := @LIBV_LIBDIR@
+LIBV_LIBS := @LIBV_LIBS@
+
+PREFIX := @PREFIX@
+LIBDIR := @LIBDIR@
+INCLUDEDIR := @INCLUDEDIR@
+INSTALL ?= install
+
+LIBV_DIR_ABS := $(abspath $(LIBV_DIR))
+LIBV_INCLUDE_DIR_ABS := $(abspath $(LIBV_INCLUDE_DIR))
+LIBV_LIBDIR_ABS := $(abspath $(LIBV_LIBDIR))
+DARKFS_CPPFLAGS := $(CPPFLAGS) -I$(TOPDIR)/src/include -I$(LIBV_INCLUDE_DIR_ABS)
+
+OBJS := $(shell $(MAKE) --no-print-directory -s -C src print-objs TOPDIR=$(TOPDIR) BUILD_DIR=$(BUILD_DIR) CPPFLAGS="$(DARKFS_CPPFLAGS)")
+STATIC_LIB := libdarkfs.a
+SHARED_LIB := libdarkfs.so
+
+.NOTPARALLEL:
+.PHONY: all clean distclean install uninstall libv-local src-build
+
+all: libv-local src-build $(STATIC_LIB) $(SHARED_LIB)
+
+libv-local:
+	$(MAKE) -C "$(LIBV_DIR_ABS)" all CC="$(CC)" AR="$(AR)" CFLAGS="$(CFLAGS)"
+
+src-build:
+	$(MAKE) -C src all TOPDIR="$(TOPDIR)" BUILD_DIR="$(BUILD_DIR)" \
+		CC="$(CC)" CFLAGS="$(CFLAGS)" CPPFLAGS="$(DARKFS_CPPFLAGS)"
+
+$(STATIC_LIB): src-build
+	$(AR) rcs $@ $(OBJS)
+
+$(SHARED_LIB): src-build libv-local
+	$(CC) -shared -o $@ $(OBJS) $(LDFLAGS) -L$(LIBV_LIBDIR_ABS) $(LIBV_LIBS) $(LIBS)
+
+clean:
+	$(MAKE) -C src clean TOPDIR="$(TOPDIR)" BUILD_DIR="$(BUILD_DIR)"
+	$(MAKE) -C "$(LIBV_DIR_ABS)" clean
+	rm -rf "$(BUILD_DIR)"
+	rm -f $(STATIC_LIB) $(SHARED_LIB)
+
+distclean: clean
+	rm -f Makefile
+
+install: all
+	$(INSTALL) -d "$(DESTDIR)$(LIBDIR)"
+	$(INSTALL) -d "$(DESTDIR)$(INCLUDEDIR)/darkfs"
+	$(INSTALL) -d "$(DESTDIR)$(INCLUDEDIR)/libv"
+	$(INSTALL) -m 644 $(STATIC_LIB) $(LIBV_DIR_ABS)/libv.a "$(DESTDIR)$(LIBDIR)/"
+	$(INSTALL) -m 755 $(SHARED_LIB) $(LIBV_DIR_ABS)/libv.so "$(DESTDIR)$(LIBDIR)/"
+	$(INSTALL) -m 644 src/include/*.h "$(DESTDIR)$(INCLUDEDIR)/darkfs/"
+	$(INSTALL) -m 644 $(LIBV_INCLUDE_DIR_ABS)/*.h "$(DESTDIR)$(INCLUDEDIR)/libv/"
+
+uninstall:
+	-rm -f "$(DESTDIR)$(LIBDIR)/$(STATIC_LIB)" "$(DESTDIR)$(LIBDIR)/$(SHARED_LIB)"
+	-rm -f "$(DESTDIR)$(LIBDIR)/libv.a" "$(DESTDIR)$(LIBDIR)/libv.so"
+	-rm -rf "$(DESTDIR)$(INCLUDEDIR)/darkfs" "$(DESTDIR)$(INCLUDEDIR)/libv"

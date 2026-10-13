@@ -1,0 +1,78 @@
+PROJECT := libv
+TOPDIR := $(CURDIR)
+
+VERSION := @VERSION@
+BUILD_DIR := @BUILD_DIR@
+LIBV_INCLUDE := $(TOPDIR)/src/include
+CC := @CC@
+AR := @AR@
+CFLAGS := @CFLAGS@
+override CPPFLAGS += -I$(LIBV_INCLUDE)
+PREFIX := @PREFIX@
+EXEC_PREFIX := @EXEC_PREFIX@
+LIBDIR := @LIBDIR@
+INCLUDEDIR := @INCLUDEDIR@
+PKGCONFIGDIR := @PKGCONFIGDIR@
+INSTALL ?= install
+
+OBJS := $(shell $(MAKE) --no-print-directory -s -C src print-objs TOPDIR=$(TOPDIR) BUILD_DIR=$(BUILD_DIR) LIBV_INCLUDE=$(LIBV_INCLUDE))
+
+STATIC_LIB := libv.a
+SHARED_LIB := libv.so
+PC_FILE := $(BUILD_DIR)/libv.pc
+TEST_SRCS := $(wildcard tests/test_*.c)
+TEST_EXES := $(TEST_SRCS:.c=)
+
+.NOTPARALLEL:
+.PHONY: all clean distclean install uninstall test src-build
+
+all: src-build $(STATIC_LIB) $(SHARED_LIB)
+
+src-build:
+	$(MAKE) -C src all TOPDIR=$(TOPDIR) BUILD_DIR=$(BUILD_DIR) LIBV_INCLUDE=$(LIBV_INCLUDE)
+
+$(STATIC_LIB): src-build
+	$(AR) rcs $@ $(OBJS)
+
+$(SHARED_LIB): src-build
+	$(CC) -shared -o $@ $(OBJS)
+
+$(PC_FILE): libv.pc.in
+	@mkdir -p $(@D)
+	sed \
+		-e "s|__PREFIX__|$(PREFIX)|g" \
+		-e "s|__EXEC_PREFIX__|$(EXEC_PREFIX)|g" \
+		-e "s|__LIBDIR__|$(LIBDIR)|g" \
+		-e "s|__INCLUDEDIR__|$(INCLUDEDIR)|g" \
+		-e "s|__VERSION__|$(VERSION)|g" \
+		$< > $@
+
+tests/%: tests/%.c $(STATIC_LIB)
+	$(CC) $(CPPFLAGS) $(CFLAGS) -o $@ $< $(STATIC_LIB) -pthread
+
+test: $(TEST_EXES)
+	@for t in $(TEST_EXES); do ./$$t || exit 1; done
+	@echo "libv tests passed."
+
+clean:
+	$(MAKE) -C src clean TOPDIR=$(TOPDIR) BUILD_DIR=$(BUILD_DIR) LIBV_INCLUDE=$(LIBV_INCLUDE)
+	rm -rf $(BUILD_DIR)
+	rm -f $(STATIC_LIB) $(SHARED_LIB) $(TEST_EXES)
+
+distclean: clean
+	rm -f Makefile
+
+install: all $(PC_FILE)
+	$(INSTALL) -d "$(DESTDIR)$(LIBDIR)"
+	$(INSTALL) -d "$(DESTDIR)$(INCLUDEDIR)/libv"
+	$(INSTALL) -d "$(DESTDIR)$(PKGCONFIGDIR)"
+	$(INSTALL) -m 644 $(STATIC_LIB) "$(DESTDIR)$(LIBDIR)/"
+	$(INSTALL) -m 755 $(SHARED_LIB) "$(DESTDIR)$(LIBDIR)/"
+	$(INSTALL) -m 644 $(LIBV_INCLUDE)/*.h "$(DESTDIR)$(INCLUDEDIR)/libv/"
+	$(INSTALL) -m 644 $(PC_FILE) "$(DESTDIR)$(PKGCONFIGDIR)/libv.pc"
+
+uninstall:
+	-rm -f "$(DESTDIR)$(LIBDIR)/$(STATIC_LIB)"
+	-rm -f "$(DESTDIR)$(LIBDIR)/$(SHARED_LIB)"
+	-rm -f "$(DESTDIR)$(PKGCONFIGDIR)/libv.pc"
+	-rm -rf "$(DESTDIR)$(INCLUDEDIR)/libv"

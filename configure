@@ -1,0 +1,92 @@
+#!/bin/sh
+set -eu
+
+PREFIX=${PREFIX:-/usr/local}
+LIBV_DIR=${LIBV_DIR:-libv}
+BUILD_DIR='$(TOPDIR)/build'
+CC=${CC:-cc}
+AR=${AR:-ar}
+CFLAGS=${CFLAGS:--O2 -g -fPIC}
+CPPFLAGS=${CPPFLAGS:-}
+LDFLAGS=${LDFLAGS:-}
+LIBS=${LIBS:-}
+LIBV_INCLUDE_DIR=${LIBV_INCLUDE_DIR:-}
+LIBV_LIBDIR=${LIBV_LIBDIR:-}
+LIBV_LIBS=${LIBV_LIBS:--lv}
+LIBDIR=${LIBDIR:-}
+INCLUDEDIR=${INCLUDEDIR:-}
+
+usage() {
+	cat <<'EOF'
+Usage: ./configure [OPTIONS]
+
+Options:
+  --prefix=PATH          install prefix [/usr/local]
+  --libv-dir=PATH        in-tree or external libv directory [libv]
+  --build-dir=PATH       object output directory [TOPDIR/build]
+  --cc=CC                C compiler [cc or $CC]
+  --ar=AR                static archive tool [ar or $AR]
+  --help                 show this help
+
+Environment variables: CFLAGS CPPFLAGS LDFLAGS LIBS LIBV_INCLUDE_DIR
+                       LIBV_LIBDIR LIBV_LIBS LIBDIR INCLUDEDIR
+EOF
+}
+
+for arg in "$@"; do
+	case "$arg" in
+		--prefix=*) PREFIX=${arg#--prefix=} ;;
+		--libv-dir=*) LIBV_DIR=${arg#--libv-dir=} ;;
+		--build-dir=*) BUILD_DIR=${arg#--build-dir=} ;;
+		--cc=*) CC=${arg#--cc=} ;;
+		--ar=*) AR=${arg#--ar=} ;;
+		--help) usage; exit 0 ;;
+		*) echo "configure: unknown option: $arg" >&2; usage >&2; exit 1 ;;
+	esac
+done
+
+LIBV_INCLUDE_DIR=${LIBV_INCLUDE_DIR:-$LIBV_DIR/src/include}
+LIBV_LIBDIR=${LIBV_LIBDIR:-$LIBV_DIR}
+LIBDIR=${LIBDIR:-$PREFIX/lib}
+INCLUDEDIR=${INCLUDEDIR:-$PREFIX/include}
+
+if [ ! -f Makefile.in ]; then
+	echo "configure: Makefile.in not found" >&2
+	exit 1
+fi
+if [ ! -f "$LIBV_DIR/Makefile" ]; then
+	echo "configure: libv Makefile not found at $LIBV_DIR" >&2
+	exit 1
+fi
+
+sed \
+	-e "s|@BUILD_DIR@|$BUILD_DIR|g" \
+	-e "s|@CC@|$CC|g" \
+	-e "s|@AR@|$AR|g" \
+	-e "s|@CFLAGS@|$CFLAGS|g" \
+	-e "s|@CPPFLAGS@|$CPPFLAGS|g" \
+	-e "s|@LDFLAGS@|$LDFLAGS|g" \
+	-e "s|@LIBS@|$LIBS|g" \
+	-e "s|@LIBV_DIR@|$LIBV_DIR|g" \
+	-e "s|@LIBV_INCLUDE_DIR@|$LIBV_INCLUDE_DIR|g" \
+	-e "s|@LIBV_LIBDIR@|$LIBV_LIBDIR|g" \
+	-e "s|@LIBV_LIBS@|$LIBV_LIBS|g" \
+	-e "s|@PREFIX@|$PREFIX|g" \
+	-e "s|@LIBDIR@|$LIBDIR|g" \
+	-e "s|@INCLUDEDIR@|$INCLUDEDIR|g" \
+	Makefile.in > Makefile
+
+cat <<EOF
+Configured darkfs:
+  CC=$CC
+  AR=$AR
+  CFLAGS=$CFLAGS
+  LIBV_DIR=$LIBV_DIR
+  LIBV_INCLUDE_DIR=$LIBV_INCLUDE_DIR
+  LIBV_LIBDIR=$LIBV_LIBDIR
+  LIBV_LIBS=$LIBV_LIBS
+  PREFIX=$PREFIX
+  BUILD_DIR=$BUILD_DIR
+
+Run make to build libdarkfs and libv.
+EOF
